@@ -113,15 +113,15 @@ func makeMirrorCommandFunc(cmd *cobra.Command, args []string) {
 	auth := authDestCfg()
 
 	cc := &clientConfig{
-		endpoints:        []string{args[0]},
+		endpoints:        []string{args[0]}, //目的集群地址
 		dialTimeout:      dialTimeout,
 		keepAliveTime:    keepAliveTime,
 		keepAliveTimeout: keepAliveTimeout,
 		scfg:             sec,
 		acfg:             auth,
 	}
-	dc := cc.mustClient()
-	c := mustClientFromCmd(cmd)
+	dc := cc.mustClient()       //目的集群客户端链接
+	c := mustClientFromCmd(cmd) //源集群客户端链接
 
 	err := makeMirror(context.TODO(), c, dc)
 	cobrautl.ExitWithError(cobrautl.ExitError, err)
@@ -178,7 +178,7 @@ func makeMirror(ctx context.Context, c *clientv3.Client, dc *clientv3.Client) er
 
 		for _, ev := range wr.Events {
 			nextRev := ev.Kv.ModRevision
-			if lastRev != 0 && nextRev > lastRev {
+			if lastRev != 0 && nextRev > lastRev { //nextRev > lastRev 说明ops对堆积的请求没有同步，需要先同步
 				_, err := dc.Txn(ctx).Then(ops...).Commit()
 				if err != nil {
 					return err

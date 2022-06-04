@@ -41,9 +41,9 @@ func NewSyncer(c *clientv3.Client, prefix string, rev int64) Syncer {
 }
 
 type syncer struct {
-	c      *clientv3.Client
-	rev    int64
-	prefix string
+	c      *clientv3.Client //源集群
+	rev    int64            //指定同步的版本
+	prefix string           //指定同步的key前缀
 }
 
 func (s *syncer) SyncBase(ctx context.Context) (<-chan clientv3.GetResponse, chan error) {
@@ -51,6 +51,7 @@ func (s *syncer) SyncBase(ctx context.Context) (<-chan clientv3.GetResponse, cha
 	errchan := make(chan error, 1)
 
 	// if rev is not specified, we will choose the most recent revision.
+	//get随机key获取当前集群的最新版本号
 	if s.rev == 0 {
 		// If len(s.prefix) == 0, we will check a random key to fetch the most recent
 		// revision (foo), otherwise we use the provided prefix.
@@ -73,7 +74,7 @@ func (s *syncer) SyncBase(ctx context.Context) (<-chan clientv3.GetResponse, cha
 		defer close(errchan)
 
 		var key string
-
+		//分批获取，防止集群数据多，一次性list所有数据，导致集群不稳定。
 		opts := []clientv3.OpOption{clientv3.WithLimit(batchLimit), clientv3.WithRev(s.rev)}
 
 		if len(s.prefix) == 0 {
@@ -98,7 +99,7 @@ func (s *syncer) SyncBase(ctx context.Context) (<-chan clientv3.GetResponse, cha
 
 			respchan <- *resp
 
-			if !resp.More {
+			if !resp.More { //通过resp.More 字段判断后面是否还有数据
 				return
 			}
 			// move to next key
@@ -113,5 +114,6 @@ func (s *syncer) SyncUpdates(ctx context.Context) clientv3.WatchChan {
 	if s.rev == 0 {
 		panic("unexpected revision = 0. Calling SyncUpdates before SyncBase finishes?")
 	}
+	//watch version为list version+1，指定version防止list 和 watch时间差导致的数据丢失问题
 	return s.c.Watch(ctx, s.prefix, clientv3.WithPrefix(), clientv3.WithRev(s.rev+1))
 }
