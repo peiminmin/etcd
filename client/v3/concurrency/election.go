@@ -29,6 +29,9 @@ var (
 	ErrElectionNoLeader  = errors.New("election: no leader")
 )
 
+//tip: 所有客户端同时注册，先注册的成为主，后注册的会被waitDeletes阻塞
+//     选主需要避免同时出现多主的场景，选主的使用场景是，成为主之后执行的是一个长任务
+//		因此，成为主之后需要通过observe方法,监听主是否切换
 type Election struct {
 	session *Session
 
@@ -70,14 +73,15 @@ func (e *Election) Campaign(ctx context.Context, val string) error {
 	s := e.session
 	client := e.session.Client()
 
-	k := fmt.Sprintf("%s%x", e.keyPrefix, s.Lease()) //key=prifix+leasID
-	txn := client.Txn(ctx).If(v3.Compare(v3.CreateRevision(k), "=", 0))
+	k := fmt.Sprintf("%s%x", e.keyPrefix, s.Lease())                    //key=prifix+leasID
+	txn := client.Txn(ctx).If(v3.Compare(v3.CreateRevision(k), "=", 0)) //etcd中判断key是否存在的一个方式：判断key的createversion是否等于0
 	txn = txn.Then(v3.OpPut(k, val, v3.WithLease(s.Lease())))
 	txn = txn.Else(v3.OpGet(k))
 	resp, err := txn.Commit()
 	if err != nil {
 		return err
 	}
+	//tip: leaderRev 记录my key的create revision
 	e.leaderKey, e.leaderRev, e.leaderSession = k, resp.Header.Revision, s
 	if !resp.Succeeded {
 		kv := resp.Responses[0].GetResponseRange().Kvs[0]
@@ -170,6 +174,7 @@ func (e *Election) Observe(ctx context.Context) <-chan v3.GetResponse {
 	return retc
 }
 
+//ask: 如何解决网络问题导致的双主？？
 func (e *Election) observe(ctx context.Context, ch chan<- v3.GetResponse) {
 	client := e.session.Client()
 

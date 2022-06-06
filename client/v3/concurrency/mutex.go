@@ -38,6 +38,9 @@ type Mutex struct {
 	hdr   *pb.ResponseHeader
 }
 
+//tip:NewMutex 所有实力启动后通过txn方式写入自己的key，key写入的最早的拿到锁
+//     从使用场景看,获取锁是一个一次性的行为，获取锁执行一个短任务操作，执行完成之后，立即释放锁 使用场景需要和选主区分
+//     例如拿到锁之后往数据库插入一条数据，插入结束，锁释放。不应该长期持有锁，因此不需要解决两个实例同时拿到锁的问题
 func NewMutex(s *Session, pfx string) *Mutex {
 	return &Mutex{s, pfx + "/", "", -1, nil}
 }
@@ -68,6 +71,7 @@ func (m *Mutex) TryLock(ctx context.Context) error {
 
 // Lock locks the mutex with a cancelable context. If the context is canceled
 // while trying to acquire the lock, the mutex tries to clean its stale lock entry.
+//tip: 拿到锁之后，lock方法就返回了;拿不到锁，lock方法会一直阻塞在waitDeletes调用，等比自己创建的早的key被删除
 func (m *Mutex) Lock(ctx context.Context) error {
 	resp, err := m.tryAcquire(ctx)
 	if err != nil {
@@ -120,6 +124,7 @@ func (m *Mutex) tryAcquire(ctx context.Context) (*v3.TxnResponse, error) {
 	if err != nil {
 		return nil, err
 	}
+	//myRev 等于my key create reversion
 	m.myRev = resp.Header.Revision
 	if !resp.Succeeded {
 		m.myRev = resp.Responses[0].GetResponseRange().Kvs[0].CreateRevision
