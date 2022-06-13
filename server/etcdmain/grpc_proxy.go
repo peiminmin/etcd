@@ -99,6 +99,7 @@ var (
 
 const defaultGRPCMaxCallSendMsgSize = 1.5 * 1024 * 1024
 
+//tip: 添加grpc-proxy启动命令
 func init() {
 	rootCmd.AddCommand(newGRPCProxyCommand())
 }

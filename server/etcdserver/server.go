@@ -347,13 +347,13 @@ func NewServer(cfg config.ServerConfig) (srv *EtcdServer, err error) {
 			zap.String("recommended-request-size", recommendedMaxRequestBytesString),
 		)
 	}
-
+	//检查数据目录是否存在和权限是否正确，如果数据目录不存在则创建数据目录
 	if terr := fileutil.TouchDirAll(cfg.DataDir); terr != nil {
 		return nil, fmt.Errorf("cannot access data directory: %v", terr)
 	}
-
+	//检查wal日志是否存在
 	haveWAL := wal.Exist(cfg.WALDir())
-
+	//检查快照是否存在
 	if err = fileutil.TouchDirAll(cfg.SnapDir()); err != nil {
 		cfg.Logger.Fatal(
 			"failed to create snapshot directory",
@@ -379,11 +379,12 @@ func NewServer(cfg config.ServerConfig) (srv *EtcdServer, err error) {
 
 	ci := cindex.NewConsistentIndex(nil)
 	beHooks := &backendHooks{lg: cfg.Logger, indexer: ci}
-	be := openBackend(cfg, beHooks)
+	be := openBackend(cfg, beHooks) //打开boltdb
 	ci.SetBackend(be)
 	cindex.CreateMetaBucket(be.BatchTx())
 
 	if cfg.ExperimentalBootstrapDefragThresholdMegabytes != 0 {
+		//启动时检查当前可用内存大于ExperimentalBootstrapDefragThresholdMegabytes,否则做一次历史版本压缩
 		err := maybeDefragBackend(cfg, be)
 		if err != nil {
 			return nil, err
@@ -404,7 +405,7 @@ func NewServer(cfg config.ServerConfig) (srv *EtcdServer, err error) {
 		remotes  []*membership.Member
 		snapshot *raftpb.Snapshot
 	)
-
+	//根据wal日志是否存在，决定raft节点启动前的检查项，并new cluster 启动raft节点
 	switch {
 	case !haveWAL && !cfg.NewCluster:
 		if err = cfg.VerifyJoinExisting(); err != nil {
@@ -429,6 +430,7 @@ func NewServer(cfg config.ServerConfig) (srv *EtcdServer, err error) {
 		cl.SetID(types.ID(0), existingCluster.ID())
 		cl.SetStore(st)
 		cl.SetBackend(be)
+		//启动raft节点
 		id, n, s, w = startNode(cfg, cl, nil)
 		cl.SetID(id, existingCluster.ID())
 
@@ -464,6 +466,7 @@ func NewServer(cfg config.ServerConfig) (srv *EtcdServer, err error) {
 		}
 		cl.SetStore(st)
 		cl.SetBackend(be)
+		//启动raft节点
 		id, n, s, w = startNode(cfg, cl, cl.MemberIDs())
 		cl.SetID(id, cl.ID())
 
@@ -528,7 +531,7 @@ func NewServer(cfg config.ServerConfig) (srv *EtcdServer, err error) {
 		} else {
 			cfg.Logger.Info("No snapshot found. Recovering WAL from scratch!")
 		}
-
+		//启动raft节点
 		if !cfg.ForceNewCluster {
 			id, cl, n, s, w = restartNode(cfg, snapshot)
 		} else {
@@ -550,9 +553,9 @@ func NewServer(cfg config.ServerConfig) (srv *EtcdServer, err error) {
 	if terr := fileutil.TouchDirAll(cfg.MemberDir()); terr != nil {
 		return nil, fmt.Errorf("cannot access member directory: %v", terr)
 	}
-
+	//记录etcd server状态及其与其他节点的通信情况
 	sstats := stats.NewServerStats(cfg.Name, id.String())
-	lstats := stats.NewLeaderStats(cfg.Logger, id.String())
+	lstats := stats.NewLeaderStats(cfg.Logger, id.String()) //leader用来记录自身状态及其与其他follower的通信情况
 
 	heartbeat := time.Duration(cfg.TickMs) * time.Millisecond
 	srv = &EtcdServer{
@@ -586,7 +589,7 @@ func NewServer(cfg config.ServerConfig) (srv *EtcdServer, err error) {
 		firstCommitInTermC: make(chan struct{}),
 	}
 	serverID.With(prometheus.Labels{"server_id": id.String()}).Set(1)
-
+	//ApplierV2 用来处理raft消息
 	srv.applyV2 = NewApplierV2(cfg.Logger, srv.v2store, srv.cluster)
 
 	srv.be = be
@@ -595,13 +598,14 @@ func NewServer(cfg config.ServerConfig) (srv *EtcdServer, err error) {
 
 	// always recover lessor before kv. When we recover the mvcc.KV it will reattach keys to its leases.
 	// If we recover mvcc.KV first, it will attach the keys to the wrong lessor before it recovers.
+	//lessor用来处理lessor相关的请求
 	srv.lessor = lease.NewLessor(srv.Logger(), srv.be, srv.cluster, lease.LessorConfig{
 		MinLeaseTTL:                int64(math.Ceil(minTTL.Seconds())),
 		CheckpointInterval:         cfg.LeaseCheckpointInterval,
 		CheckpointPersist:          cfg.LeaseCheckpointPersist,
 		ExpiredLeasesRetryInterval: srv.Cfg.ReqTimeout(),
 	})
-
+	//TokenProvider生成验证客户端请求的token
 	tp, err := auth.NewTokenProvider(cfg.Logger, cfg.AuthToken,
 		func(index uint64) <-chan struct{} {
 			return srv.applyWait.Wait(index)
@@ -629,7 +633,7 @@ func NewServer(cfg config.ServerConfig) (srv *EtcdServer, err error) {
 			)
 		}
 	}
-
+	//AuthStore处理鉴权相关请求,用户 role rbac增改查和auth认证
 	srv.authStore = auth.NewAuthStore(srv.Logger(), srv.be, tp, int(cfg.BcryptCost))
 
 	newSrv := srv // since srv == nil in defer if srv is returned as nil
@@ -640,6 +644,7 @@ func NewServer(cfg config.ServerConfig) (srv *EtcdServer, err error) {
 			newSrv.kv.Close()
 		}
 	}()
+	//数据自动压缩
 	if num := cfg.AutoCompactionRetention; num != 0 {
 		srv.compactor, err = v3compactor.New(cfg.Logger, cfg.AutoCompactionMode, num, srv.kv, srv)
 		if err != nil {
@@ -647,7 +652,7 @@ func NewServer(cfg config.ServerConfig) (srv *EtcdServer, err error) {
 		}
 		srv.compactor.Run()
 	}
-
+	//aaplierv3 是处理内部V3 raft请求的接口
 	srv.applyV3Base = srv.newApplierV3Backend()
 	srv.applyV3Internal = srv.newApplierV3Internal()
 	if err = srv.restoreAlarms(); err != nil {
@@ -2720,6 +2725,7 @@ func (s *EtcdServer) getTxPostLockInsideApplyHook() func() {
 }
 
 func maybeDefragBackend(cfg config.ServerConfig, be backend.Backend) error {
+	//ask: 启动时size和sizeInuse 如何加载??
 	size := be.Size()
 	sizeInUse := be.SizeInUse()
 	freeableMemory := uint(size - sizeInUse)

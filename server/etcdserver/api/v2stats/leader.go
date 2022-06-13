@@ -25,6 +25,7 @@ import (
 
 // LeaderStats is used by the leader in an etcd cluster, and encapsulates
 // statistics about communication with its followers
+//leader使用的数据结构，封装其与其他follower通信的统计数据
 type LeaderStats struct {
 	lg *zap.Logger
 	leaderStats

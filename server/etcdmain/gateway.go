@@ -46,6 +46,7 @@ var (
 	}
 )
 
+//tip: 添加tcp gateway启动方式
 func init() {
 	rootCmd.AddCommand(newGatewayCommand())
 }

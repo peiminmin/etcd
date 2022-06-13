@@ -1141,6 +1141,10 @@ func (as *authStore) AuthInfoFromTLS(ctx context.Context) (ai *AuthInfo) {
 	return ai
 }
 
+//tip: AuthInfoFromCtx 从rpc请求中获取token解密出用户名
+//	AuthInfo中存储用户名和revision
+//	为啥记录revision:记录请求发生的在集群的那个revision,当请求的revision小于auth模块的vision,auth认证会失败，
+//	主要用来auth权限的变更可以即使的应用,防止客户端伪造一个过期的请求
 func (as *authStore) AuthInfoFromCtx(ctx context.Context) (*AuthInfo, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {

@@ -254,6 +254,8 @@ func (c *Client) Dial(ep string) (*grpc.ClientConn, error) {
 	return c.dial(creds, grpc.WithResolvers(resolver.New(ep)))
 }
 
+//tip: 如果客户端设置了username和password,则客户端会发起Authenticate请求，获取token
+//	之后token会设置到http2请求的header
 func (c *Client) getToken(ctx context.Context) error {
 	var err error // return last error in a case of fail
 

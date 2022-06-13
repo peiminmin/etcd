@@ -26,6 +26,7 @@ import (
 	"go.etcd.io/etcd/server/v3/mvcc"
 )
 
+//tip: authApplierV3的每一个操作方法都会先执行IsXXXPermitted方法验证authinfo的有效性
 type authApplierV3 struct {
 	applierV3
 	as     auth.AuthStore

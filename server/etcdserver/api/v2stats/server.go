@@ -25,6 +25,7 @@ import (
 
 // ServerStats encapsulates various statistics about an EtcdServer and its
 // communication with other members of the cluster
+//封装有关etcd server及其与集群其他成员通信的各种统计数据
 type ServerStats struct {
 	serverStats
 	sync.Mutex

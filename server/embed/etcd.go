@@ -101,6 +101,7 @@ type peerListener struct {
 // The returned Etcd.Server is not guaranteed to have joined the cluster. Wait
 // on the Etcd.Server.ReadyNotify() channel to know when it completes and is ready for use.
 func StartEtcd(inCfg *Config) (e *Etcd, err error) {
+	//notice: 1. 校验启动参数
 	if err = inCfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -132,6 +133,7 @@ func StartEtcd(inCfg *Config) (e *Etcd, err error) {
 		"configuring peer listeners",
 		zap.Strings("listen-peer-urls", e.cfg.getLPURLs()),
 	)
+	//notice: 2. 初始化对等链接-tcp链接
 	if e.Peers, err = configurePeerListeners(cfg); err != nil {
 		return e, err
 	}
@@ -140,6 +142,7 @@ func StartEtcd(inCfg *Config) (e *Etcd, err error) {
 		"configuring client listeners",
 		zap.Strings("listen-client-urls", e.cfg.getLCURLs()),
 	)
+	//notice: 2. 初始化客户端链接-tcp链接
 	if e.sctxs, err = configureClientListeners(cfg); err != nil {
 		return e, err
 	}
@@ -154,13 +157,14 @@ func StartEtcd(inCfg *Config) (e *Etcd, err error) {
 	)
 	memberInitialized := true
 	if !isMemberInitialized(cfg) {
+		//判断原来数据目录是否存在，存在说明不是一个全新的集群，否则是一个全新集群
 		memberInitialized = false
 		urlsmap, token, err = cfg.PeerURLsMapAndToken("etcd")
 		if err != nil {
 			return e, fmt.Errorf("error setting up initial cluster: %v", err)
 		}
 	}
-
+	//notice: 3. 自动压缩配置处理
 	// AutoCompactionRetention defaults to "0" if not set.
 	if len(cfg.AutoCompactionRetention) == 0 {
 		cfg.AutoCompactionRetention = "0"
@@ -226,7 +230,7 @@ func StartEtcd(inCfg *Config) (e *Etcd, err error) {
 		ExperimentalBootstrapDefragThresholdMegabytes: cfg.ExperimentalBootstrapDefragThresholdMegabytes,
 		V2Deprecation: cfg.V2DeprecationEffective(),
 	}
-
+	//notice 4 是否开启分布式tracing
 	if srvcfg.ExperimentalEnableDistributedTracing {
 		tctx := context.Background()
 		tracingExporter, opts, err := e.setupTracing(tctx)
@@ -241,7 +245,7 @@ func StartEtcd(inCfg *Config) (e *Etcd, err error) {
 	}
 
 	print(e.cfg.logger, *cfg, srvcfg, memberInitialized)
-
+	//notice 5 初始化etcd server
 	if e.Server, err = etcdserver.NewServer(srvcfg); err != nil {
 		return e, err
 	}
@@ -252,6 +256,7 @@ func StartEtcd(inCfg *Config) (e *Etcd, err error) {
 	// newly started member ("memberInitialized==false")
 	// does not need corruption check
 	if memberInitialized {
+		//ask: CheckInitialHashKV 如何检查？？
 		if err = e.Server.CheckInitialHashKV(); err != nil {
 			// set "EtcdServer" to nil, so that it does not block on "EtcdServer.Close()"
 			// (nothing to close since rafthttp transports have not been started)
@@ -262,6 +267,7 @@ func StartEtcd(inCfg *Config) (e *Etcd, err error) {
 			return e, err
 		}
 	}
+	//notice 6 启动etcd server
 	e.Server.Start()
 
 	if err = e.servePeers(); err != nil {
@@ -484,6 +490,7 @@ func configurePeerListeners(cfg *Config) (peers []*peerListener, err error) {
 	}
 
 	peers = make([]*peerListener, len(cfg.LPUrls))
+	//notice:net peer listerner 异常，将已经新建的对等链接关闭
 	defer func() {
 		if err == nil {
 			return
@@ -589,6 +596,7 @@ func (e *Etcd) servePeers() (err error) {
 }
 
 func configureClientListeners(cfg *Config) (sctxs map[string]*serveCtx, err error) {
+	//notice: 1. 生成证书
 	if err = updateCipherSuites(&cfg.ClientTLSInfo, cfg.CipherSuites); err != nil {
 		return nil, err
 	}
@@ -600,8 +608,10 @@ func configureClientListeners(cfg *Config) (sctxs map[string]*serveCtx, err erro
 	}
 
 	sctxs = make(map[string]*serveCtx)
+	//notice: 2 new grpc server
 	for _, u := range cfg.LCUrls {
 		sctx := newServeCtx(cfg.logger)
+		//notice: 可以同时支持http unix和https unixs端口
 		if u.Scheme == "http" || u.Scheme == "unix" {
 			if !cfg.ClientTLSInfo.Empty() {
 				cfg.logger.Warn("scheme is HTTP while key and cert files are present; ignoring key and cert files", zap.String("client-url", u.String()))
