@@ -71,7 +71,7 @@ func Server(s *etcdserver.EtcdServer, tls *tls.Config, interceptor grpc.UnarySer
 	opts = append(opts, grpc.MaxConcurrentStreams(maxStreams))
 
 	grpcServer := grpc.NewServer(append(opts, gopts...)...)
-
+	//添加rpc handler
 	pb.RegisterKVServer(grpcServer, NewQuotaKVServer(s))
 	pb.RegisterWatchServer(grpcServer, NewWatchServer(s))
 	pb.RegisterLeaseServer(grpcServer, NewQuotaLeaseServer(s))

@@ -252,13 +252,13 @@ type msgWithResult struct {
 
 // node is the canonical implementation of the Node interface
 type node struct {
-	propc      chan msgWithResult
-	recvc      chan pb.Message
-	confc      chan pb.ConfChangeV2
-	confstatec chan pb.ConfState
-	readyc     chan Ready
-	advancec   chan struct{}
-	tickc      chan struct{}
+	propc      chan msgWithResult   //proposal commit channel
+	recvc      chan pb.Message      //receive channel
+	confc      chan pb.ConfChangeV2 //conf channel
+	confstatec chan pb.ConfState    //conf state channel
+	readyc     chan Ready           //ready channel
+	advancec   chan struct{}        //advance channel
+	tickc      chan struct{}        //ticket channel
 	done       chan struct{}
 	stop       chan struct{}
 	status     chan chan Status
@@ -308,6 +308,7 @@ func (n *node) run() {
 	lead := None
 
 	for {
+		//ask: 这部分代码的目的
 		if advancec != nil {
 			readyc = nil
 		} else if n.rn.HasReady() {

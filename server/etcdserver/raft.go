@@ -465,6 +465,7 @@ func startNode(cfg config.ServerConfig, cl *membership.RaftCluster, ids []types.
 	if len(peers) == 0 {
 		n = raft.RestartNode(c)
 	} else {
+		//tip:启动raft node
 		n = raft.StartNode(c, peers)
 	}
 	raftStatusMu.Lock()

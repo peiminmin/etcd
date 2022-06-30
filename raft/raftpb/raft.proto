@@ -13,15 +13,16 @@ option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
 enum EntryType {
-	EntryNormal       = 0;
-	EntryConfChange   = 1; // corresponds to pb.ConfChange
-	EntryConfChangeV2 = 2; // corresponds to pb.ConfChangeV2
+	EntryNormal       = 0; //普通数据操作
+	EntryConfChange   = 1; // corresponds to pb.ConfChange 集群变更操作
+	EntryConfChangeV2 = 2; // corresponds to pb.ConfChangeV2 操作使用的数据
 }
 
+//Entry记录对应一个独立的操作
 message Entry {
-	optional uint64     Term  = 2 [(gogoproto.nullable) = false]; // must be 64-bit aligned for atomic operations
-	optional uint64     Index = 3 [(gogoproto.nullable) = false]; // must be 64-bit aligned for atomic operations
-	optional EntryType  Type  = 1 [(gogoproto.nullable) = false];
+	optional uint64     Term  = 2 [(gogoproto.nullable) = false]; // must be 64-bit aligned for atomic operations 任期号
+	optional uint64     Index = 3 [(gogoproto.nullable) = false]; // must be 64-bit aligned for atomic operations 索引号
+	optional EntryType  Type  = 1 [(gogoproto.nullable) = false]; //操作类型
 	optional bytes      Data  = 4;
 }
 
@@ -61,23 +62,23 @@ enum MessageType {
 }
 
 message Message {
-	optional MessageType type        = 1  [(gogoproto.nullable) = false];
-	optional uint64      to          = 2  [(gogoproto.nullable) = false];
-	optional uint64      from        = 3  [(gogoproto.nullable) = false];
-	optional uint64      term        = 4  [(gogoproto.nullable) = false];
+	optional MessageType type        = 1  [(gogoproto.nullable) = false]; //消息类型，raft模块根据改字段区分不同的消息类型进行分类处理
+	optional uint64      to          = 2  [(gogoproto.nullable) = false];  //目的peer节点ID
+	optional uint64      from        = 3  [(gogoproto.nullable) = false]; //发送消息的节点ID
+	optional uint64      term        = 4  [(gogoproto.nullable) = false]; //发送消息节点的Term值，本地消息 Term=0
 	// logTerm is generally used for appending Raft logs to followers. For example,
 	// (type=MsgApp,index=100,logTerm=5) means leader appends entries starting at
 	// index=101, and the term of entry at index 100 is 5.
 	// (type=MsgAppResp,reject=true,index=100,logTerm=5) means follower rejects some
 	// entries from its leader as it already has an entry with term 5 at index 100.
-	optional uint64      logTerm     = 5  [(gogoproto.nullable) = false];
-	optional uint64      index       = 6  [(gogoproto.nullable) = false];
+	optional uint64      logTerm     = 5  [(gogoproto.nullable) = false]; //消息携带的第一条entry记录的term值
+	optional uint64      index       = 6  [(gogoproto.nullable) = false]; //索引值，MsgApp消息的index字段保存了其携带的Entry记录种前一条记录的Index值。MsgAppResp消息的Index字段则是Follower节点提示leader节点下次从那个位置开始发送entry记录
 	repeated Entry       entries     = 7  [(gogoproto.nullable) = false];
-	optional uint64      commit      = 8  [(gogoproto.nullable) = false];
-	optional Snapshot    snapshot    = 9  [(gogoproto.nullable) = false];
-	optional bool        reject      = 10 [(gogoproto.nullable) = false];
-	optional uint64      rejectHint  = 11 [(gogoproto.nullable) = false];
-	optional bytes       context     = 12;
+	optional uint64      commit      = 8  [(gogoproto.nullable) = false]; //消息发送节点的提案提交位置
+	optional Snapshot    snapshot    = 9  [(gogoproto.nullable) = false]; //传输快照时，该字段保存了快照数据
+	optional bool        reject      = 10 [(gogoproto.nullable) = false]; //在响应类型的消息中使用，表示是否拒绝收到的消息,follower节点拒绝leader节点发送过来的消息，就会把reject设置为true
+	optional uint64      rejectHint  = 11 [(gogoproto.nullable) = false]; //follow节点决绝leader节点的消息之后，会在该字段记录一个合适的entry索引值供leader节点参考
+	optional bytes       context     = 12; //消息携带的上下文信息，例如，该消息是否与leader节点转移相关
 }
 
 message HardState {

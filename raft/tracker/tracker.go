@@ -121,7 +121,7 @@ type ProgressTracker struct {
 
 	Votes map[uint64]bool
 
-	MaxInflight int
+	MaxInflight int //已经发送出去但没有收到响应的消息个数上限。如果超过限制，则暂停当前节点消息的发送，防止集群中某个节点不断发送消息，引起网络阻塞或者压垮其他节点。
 }
 
 // MakeProgressTracker initializes a ProgressTracker.
