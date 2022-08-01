@@ -21,20 +21,25 @@ import (
 	pb "go.etcd.io/etcd/raft/v3/raftpb"
 )
 
+//raftLog 用来管理节点上的raft 日志
 type raftLog struct {
 	// storage contains all stable entries since the last snapshot.
+	//用来存储快照数据及快照之后的entry记录，"stable storage"
 	storage Storage
 
 	// unstable contains all unstable entries and snapshot.
 	// they will be saved into storage.
+	//用来存储未写入storage的快照数据及entry记录
 	unstable unstable
 
 	// committed is the highest log position that is known to be in
 	// stable storage on a quorum of nodes.
+	//已提交的entry记录中最大的索引值
 	committed uint64
 	// applied is the highest log position that the application has
 	// been instructed to apply to its state machine.
 	// Invariant: applied <= committed
+	//已应用的entry记录中最大的索引值，其中 committed <= applid :提案先apply后commit
 	applied uint64
 
 	logger Logger
@@ -62,6 +67,7 @@ func newLogWithSize(storage Storage, logger Logger, maxNextEntsSize uint64) *raf
 		logger:          logger,
 		maxNextEntsSize: maxNextEntsSize,
 	}
+	//获取sotrage中第一条entry和最后一条entry
 	firstIndex, err := storage.FirstIndex()
 	if err != nil {
 		panic(err) // TODO(bdarnell)
@@ -70,10 +76,10 @@ func newLogWithSize(storage Storage, logger Logger, maxNextEntsSize uint64) *raf
 	if err != nil {
 		panic(err) // TODO(bdarnell)
 	}
-	log.unstable.offset = lastIndex + 1
+	log.unstable.offset = lastIndex + 1 //unstable中第一条entry index等于storage中最后一条entry index+1
 	log.unstable.logger = logger
 	// Initialize our committed and applied pointers to the time of the last compaction.
-	log.committed = firstIndex - 1
+	log.committed = firstIndex - 1 //
 	log.applied = firstIndex - 1
 
 	return log
