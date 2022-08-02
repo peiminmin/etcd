@@ -361,6 +361,7 @@ func newRaft(c *Config) *raft {
 	}
 	assertConfStatesEquivalent(r.logger, cs, r.switchToConfig(cfg, prs))
 
+	//根据从storage中获取的HardState，初始化raftLog committed Term Vote字段
 	if !IsEmptyHardState(hs) {
 		r.loadState(hs)
 	}
