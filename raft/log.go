@@ -67,7 +67,7 @@ func newLogWithSize(storage Storage, logger Logger, maxNextEntsSize uint64) *raf
 		logger:          logger,
 		maxNextEntsSize: maxNextEntsSize,
 	}
-	//获取sotrage中第一条entry和最后一条entry
+	//获取storage中第一条entry和最后一条entry
 	firstIndex, err := storage.FirstIndex()
 	if err != nil {
 		panic(err) // TODO(bdarnell)
@@ -79,7 +79,8 @@ func newLogWithSize(storage Storage, logger Logger, maxNextEntsSize uint64) *raf
 	log.unstable.offset = lastIndex + 1 //unstable中第一条entry index等于storage中最后一条entry index+1
 	log.unstable.logger = logger
 	// Initialize our committed and applied pointers to the time of the last compaction.
-	log.committed = firstIndex - 1 //
+	//committed applied 等于storage中第一条entry index-1（上次压缩时的entry的索引值）
+	log.committed = firstIndex - 1
 	log.applied = firstIndex - 1
 
 	return log
@@ -89,17 +90,24 @@ func (l *raftLog) String() string {
 	return fmt.Sprintf("committed=%d, applied=%d, unstable.offset=%d, len(unstable.Entries)=%d", l.committed, l.applied, l.unstable.offset, len(l.unstable.entries))
 }
 
+//当follower节点或者candidate节点需要向raftLog追加entry记录时，会通过raft.handleAppendEntries()方法调用maybeAppend方法完成Entry的追加
 // maybeAppend returns (0, false) if the entries cannot be appended. Otherwise,
 // it returns (last index of new entries, true).
+// index: MsgApp消息携带的第一条entry的index值
+// logTerm: MsgApp消息的LogTerm字段，通过消息中携带的logTerm值与当前接待您记录的Term比较，判断消息是否为过时消息
+// committed: MsgApp消息的Commit字段，leader节点通过该字段通知follower节点当前已提交Entry的位置
+// ents: MsgApp消息中携带的entry记录（待追加到raftLog中的entry记录）
 func (l *raftLog) maybeAppend(index, logTerm, committed uint64, ents ...pb.Entry) (lastnewi uint64, ok bool) {
+	//TODO: MsgApp的第一条消息不是新增的？？会和raftLog中的某一条消息重复？？
 	if l.matchTerm(index, logTerm) {
 		lastnewi = index + uint64(len(ents))
+		//当待追加的entry记录在raftLog中不存在时，会返回第一条不存在的entry记录索引值，raftlog中已经包含了全部的待追加记录且没有冲突，则返回0
 		ci := l.findConflict(ents)
 		switch {
-		case ci == 0:
-		case ci <= l.committed:
+		case ci == 0: //raftLog已经包含了所有待追加的entry记录，不必进行任何追加操作
+		case ci <= l.committed: //如果出现冲突的位置是已提交的记录，则输入异常日志，并终止整个程序
 			l.logger.Panicf("entry %d conflict with committed entry [committed(%d)]", ci, l.committed)
-		default:
+		default: //如果冲突位置是未提交的部分，则将ents中冲突之后的部分追加到raftLog中
 			offset := index + 1
 			l.append(ents[ci-offset:]...)
 		}
@@ -130,6 +138,9 @@ func (l *raftLog) append(ents ...pb.Entry) uint64 {
 // An entry is considered to be conflicting if it has the same index but
 // a different term.
 // The index of the given entries MUST be continuously increasing.
+//conflict 理解： 查找是否与raftLog中已用的Entry发生冲突，冲突有两种情况：
+// 1. raftLog 与传入的entry的index相同，但是Term不同
+// 2. raftLog 中不存在该index的entry
 func (l *raftLog) findConflict(ents []pb.Entry) uint64 {
 	for _, ne := range ents {
 		if !l.matchTerm(ne.Index, ne.Term) {
@@ -197,6 +208,8 @@ func (l *raftLog) nextEnts() (ents []pb.Entry) {
 
 // hasNextEnts returns if there is any available entries for execution. This
 // is a fast check without heavy raftLog.slice() in raftLog.nextEnts().
+//当上层模块需要从raftLog获取Entry记录进行处理时，会先调用hasNextEnts方法检测是否有待应用到状态机的记录
+//然后调用nextEnts()方法将已提交且未应用的Entry记录返回给上层模块处理。
 func (l *raftLog) hasNextEnts() bool {
 	off := max(l.applied+1, l.firstIndex())
 	return l.committed+1 > off
@@ -320,6 +333,7 @@ func (l *raftLog) isUpToDate(lasti, term uint64) bool {
 	return term > l.lastTerm() || (term == l.lastTerm() && lasti >= l.lastIndex())
 }
 
+//matchTerm 从raftLog中取出index=i的entry判断term是否等于传入的term
 func (l *raftLog) matchTerm(i, term uint64) bool {
 	t, err := l.term(i)
 	if err != nil {
