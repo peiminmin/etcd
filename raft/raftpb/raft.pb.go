@@ -436,9 +436,13 @@ func (m *Message) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_Message proto.InternalMessageInfo
 
+//HardState 是写入到WAL文件（存储Entry的文件）的状态，可以在节点重启时恢复raft的状态
 type HardState struct {
-	Term   uint64 `protobuf:"varint,1,opt,name=term" json:"term"`
-	Vote   uint64 `protobuf:"varint,2,opt,name=vote" json:"vote"`
+	//节点当前所在的Term
+	Term uint64 `protobuf:"varint,1,opt,name=term" json:"term"`
+	//节点在竞选期间所投的候选节点ID
+	Vote uint64 `protobuf:"varint,2,opt,name=vote" json:"vote"`
+	//当前已经committed Entry Index
 	Commit uint64 `protobuf:"varint,3,opt,name=commit" json:"commit"`
 }
 

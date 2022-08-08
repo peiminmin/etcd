@@ -365,9 +365,12 @@ func newRaft(c *Config) *raft {
 	if !IsEmptyHardState(hs) {
 		r.loadState(hs)
 	}
+	//如果Config中配置了Applied，则将raftLog.Applied字段重置为指定的Applied值
+	//由上层模块自己控制正确的日志已应用位置
 	if c.Applied > 0 {
 		raftlog.appliedTo(c.Applied)
 	}
+	//将当前节点切换为follower状态
 	r.becomeFollower(r.Term, None)
 
 	var nodesStrs []string
