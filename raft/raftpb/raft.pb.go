@@ -72,25 +72,49 @@ func (EntryType) EnumDescriptor() ([]byte, []int) {
 type MessageType int32
 
 const (
-	MsgHup            MessageType = 0
-	MsgBeat           MessageType = 1
-	MsgProp           MessageType = 2
-	MsgApp            MessageType = 3
-	MsgAppResp        MessageType = 4
-	MsgVote           MessageType = 5
-	MsgVoteResp       MessageType = 6
-	MsgSnap           MessageType = 7
-	MsgHeartbeat      MessageType = 8
-	MsgHeartbeatResp  MessageType = 9
-	MsgUnreachable    MessageType = 10
-	MsgSnapStatus     MessageType = 11
-	MsgCheckQuorum    MessageType = 12
+	//用于选举，对于follower或者candidate，其tick函数对应tickElection。如果follower或者candidate在选举超时时间都没有收到心跳信息，它将发送MsgHup到Step方法，其角色将变为candidate（对于follower节点）并发起新一轮选举。
+	MsgHup MessageType = 0
+	//MsgApp是一个内部使用的类型，对于leader节点，其tick函数对应tickHeartbeat，周期性地向follower节点发送MsgHeartbeat消息。
+	MsgBeat MessageType = 1
+	//MsgProp提议附加数据到log entries，而且它会重定向propose到leader节点。因此，send方法用hardState覆写了Message的term号。-
+	//当MsgProp传递到leader的step方法，leader首先会调用appendEntry方法将entries附加到它的log，接着会调用bcastAppend方法发送entries到peers。
+	// 当MsgProp传递到candidate，则直接丢弃。
+	//当传递到follower，MsgProp存储到follower的mailbox，即msgs，它保存了发送者的ID，随后通过rafthttp包转发到leader。
+	MsgProp MessageType = 2
+	//复制log entries。leader调用bcastAppend方法，其会调用bcastAppend方法发送即将要复制的MsgApp类型的logs。当MsgApp被传递到candidate的Step方法，candidate将会revert back to follower，表示存在有效的leader在发送MsgApp消息。candidate和follower会回复MsgAppResp消息。
+	MsgApp MessageType = 3
+	//用于响应log复制请求。当MsgApp发送到candidate和follower的Step方法，它们会调用handleAppendEntries方法，其会发送MsgAppResp到raft mailbox。
+	MsgAppResp MessageType = 4
+	//请求投票选举。当MsgHup传递到follower或candidate的Step方法，将会调用campaign方法去竞选自己成为leader， 一旦campaign方法被调用，节点将会变成candidate，然后发送MsgVote到peers去请求投票。
+	//当消息传递到leader或candidate的Step方法，如果消息的term小于leader或candidate的term，则消息会被拒绝掉（MsgVoteResp将设置Reject为true），如果leader或candidate接收到term更大的MsgVote，他们将会revert back to follower。
+	//当'MsgVote'被传递给follower时，只有当sender的last term大于MsgVote的term或sender的last term等于MsgVote的term但sender的最后提交索引大于或等于follower的时，它才会投票给sender。
+	MsgVote MessageType = 5
+	//投票选举相应消息。当candidate收到MsgVoteResp，它会统计自己的票数，如果票数超过quorum，它将会变成leader，然后调用bcastAppend，如果candidate收到大多数的拒绝投票，则revert back to follower。
+	MsgVoteResp MessageType = 6
+	//请求应用快照消息。当一个节点刚变为leader，或者leader接收到MsgProp消息，然后调用bcastAppend方法，这个方法会调用sendAppend方法到每个follower节点。在sendAppend方法中，如果leader获取term或者entries失败，则leader将会发送MsgSnap类型消息来请求快照。
+	MsgSnap MessageType = 7
+	//leader发送心跳信息。
+	//当MsgHeartbeat消息发送到candidate，且消息的term大于candidate的term，则candidate将revert back to follower，同时会更新自己的提交索引号，然后发送消息到mailbox。
+	//当MsgHeartbeat消息发送到follower的Step方法，如果消息的term大于follower的term，则follower会更新leaderID。
+	MsgHeartbeat MessageType = 8
+	//心跳响应消息。MsgHeartbeatResp传递到leader的Step方法，leader会知道哪些节点做了回复响应。只有当leader最后提交索引号大于follower的Match索引号时leader调用sendAppend方法。
+	MsgHeartbeatResp MessageType = 9
+	//告知消息或请求不能被deliver，当MsgUnreachable传递到leader的Step方法，leader发现发送MsgUnreachable消息的follower节点不可达，这通常意味着MsgApp丢失了。如果此时follower的progress状态为replicate，则leader会将其重新设置回probe状态。
+	MsgUnreachable MessageType = 10
+	//告知快照消息应用的结果。当follower节点拒绝MsgSnap消息，表明因为网络问题导致网络层不能正常发送snapshot到follower，从而导致快照请求失败，leader将follower的progress设置为probe。当MsgSnap没有被拒绝，表明快照被正常接收，leader将follower的progress设置为probe，同时开始log复制。
+	MsgSnapStatus MessageType = 11
+	//如果开启CheckQuorum，则选举超时后会发送MsgCheckQuorum消息，leader节点判断其是否满足quorum，如果不满足则step down to follower节点。
+	MsgCheckQuorum MessageType = 12
+	//对于MsgTransferLeader消息，follower节点会将其转发到leader节点，leader节点在收到MsgTransferLeader消息后会首先记录lead被转移者，然后判断转移目标的日志是否跟上了。
+	//如果跟上了会向被转移者发送 MsgTimeoutNow 消息, 被转移者收到消息后会强制发起新一轮选举。
+	//如果没有跟上则先进行日志同步，等leader收到同步日志的MsgAppResp消息后会判断其是否已跟上，步骤同上。
 	MsgTransferLeader MessageType = 13
 	MsgTimeoutNow     MessageType = 14
 	MsgReadIndex      MessageType = 15
 	MsgReadIndexResp  MessageType = 16
-	MsgPreVote        MessageType = 17
-	MsgPreVoteResp    MessageType = 18
+	//两阶段选举协议，是一个可选配置项。当Config.PreVote设置为true时，预选举过程与常规选举过程类似，只是不会增加term，除非它在第一个阶段竞选赢得了大多数票。加入这个选项可以将节点分区导致的影响降至最低。
+	MsgPreVote     MessageType = 17
+	MsgPreVoteResp MessageType = 18
 )
 
 var MessageType_name = map[int32]string{
