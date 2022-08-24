@@ -23,13 +23,17 @@ const (
 	// its last index. In the ideal (and common) case, only one round of probing
 	// is necessary as the follower will react with a hint. Followers that are
 	// probed over extended periods of time are often offline.
+	//探测状态：系统选举完成后,leader不知道所有follower的进度，需要发探测消息，从follower的回复中获取进度，探测消息只发送一次，再没有获取follower节点状态前，都是探测状态
 	StateProbe StateType = iota
 	// StateReplicate is the state steady in which a follower eagerly receives
 	// log entries to append to its log.
+	//复制状态：当follower回复探测消息后，消息中有follower节点目前最大日志索引，如果回复的索引大于match，更新progress的match，progress进入复制状态，开启高速复制模式，leader会发送
+	// 		  许多的日志消息，使用异步发送，提升IO效率。
 	StateReplicate
 	// StateSnapshot indicates a follower that needs log entries not available
 	// from the leader's Raft log. Such a follower needs a full snapshot to
 	// return to StateReplicate.
+	//快中状态：follower节点正在复制leader的快照
 	StateSnapshot
 )
 

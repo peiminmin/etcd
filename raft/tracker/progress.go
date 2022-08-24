@@ -27,9 +27,12 @@ import (
 // NB(tbg): Progress is basically a state machine whose transitions are mostly
 // strewn around `*raft.raft`. Additionally, some fields are only used when in a
 // certain State. All of this isn't ideal.
+// (0,Next)日志已经发送给节点，(0,match)节点已经接收的日志
+//探测状态通过ProbeSent控制消息发送的频率，复制状态通过inflights控制发送流量
+//如果follower返回消息中确认接收的日志索引大于match，说明follower开始接收日志，进入复制状态
 type Progress struct {
-	//match：对应follower几点当前已经复制成功的entry记录的索引
-	//next：对应follower几点下一个待复制entry记录的索引
+	//match：对应follower节点当前已经复制成功的entry记录的索引
+	//next：对应follower节点下一个待复制entry记录的索引
 	Match, Next uint64
 	// State defines how the leader should interact with the follower.
 	//
@@ -49,19 +52,19 @@ type Progress struct {
 	// index of the snapshot. If pendingSnapshot is set, the replication process of
 	// this Progress will be paused. raft will not resend snapshot until the pending one
 	// is reported to be failed.
-	PendingSnapshot uint64 //当前正在发送的快照数据信息
+	PendingSnapshot uint64 //当前正在发送的快照数据信息，快照状态时，快照的索引值
 
 	// RecentActive is true if the progress is recently active. Receiving any messages
 	// from the corresponding follower indicates the progress is active.
 	// RecentActive can be reset to false after an election timeout.
 	//
 	// TODO(tbg): the leader should always have this set to true.
-	RecentActive bool //如果当前节点是leader，用recentActive记录对应的follower是否存活
+	RecentActive bool //如果当前节点是leader，用recentActive记录对应的follower是否存活，只要leader节点收到任何一个follower节点的消息，那么follower节点就是活跃，新一轮选举结束时，leader默认所有节点都是不活跃的。
 
 	// ProbeSent is used while this follower is in StateProbe. When ProbeSent is
 	// true, raft should pause sending replication message to this peer until
 	// ProbeSent is reset. See ProbeAcked() and IsPaused().
-	ProbeSent bool //当前leader节点是否可以向对应的follower节点发送消息
+	ProbeSent bool //当前leader节点是否可以向对应的follower节点发送消息，探测状态使用，表示探测消息是否已经发送
 
 	// Inflights is a sliding window for the inflight messages.
 	// Each inflight message contains one or more log entries.
@@ -75,7 +78,7 @@ type Progress struct {
 	// When a leader receives a reply, the previous inflights should
 	// be freed by calling inflights.FreeLE with the index of the last
 	// received entry.
-	Inflights *Inflights //记录已经发送出去但是未收到响应的消息
+	Inflights *Inflights //记录已经发送给follower几点，但是未收到响应的消息，复制状态时使用，
 
 	// IsLearner is true if this progress is tracked for a learner.
 	IsLearner bool

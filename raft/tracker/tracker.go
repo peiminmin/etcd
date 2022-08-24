@@ -117,6 +117,7 @@ func (c *Config) Clone() Config {
 type ProgressTracker struct {
 	Config
 
+	//Progress 是leader记录的follower追随leader状态的进度：leader节点同步给follower节点的日志进度
 	Progress ProgressMap
 
 	Votes map[uint64]bool
