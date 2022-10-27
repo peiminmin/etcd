@@ -342,7 +342,7 @@ func newRaft(c *Config) *raft {
 		raftLog:                   raftlog,
 		maxMsgSize:                c.MaxSizePerMsg,
 		maxUncommittedSize:        c.MaxUncommittedEntriesSize,
-		prs:                       tracker.MakeProgressTracker(c.MaxInflightMsgs),
+		prs:                       tracker.MakeProgressTracker(c.MaxInflightMsgs), //ask: 没看懂
 		electionTimeout:           c.ElectionTick,
 		heartbeatTimeout:          c.HeartbeatTick,
 		logger:                    c.Logger,
@@ -352,6 +352,7 @@ func newRaft(c *Config) *raft {
 		disableProposalForwarding: c.DisableProposalForwarding,
 	}
 
+	//ask: 没懂这个是干啥的
 	cfg, prs, err := confchange.Restore(confchange.Changer{
 		Tracker:   r.prs,
 		LastIndex: raftlog.lastIndex(),
@@ -603,18 +604,18 @@ func (r *raft) maybeCommit() bool {
 
 func (r *raft) reset(term uint64) {
 	if r.Term != term {
-		r.Term = term
-		r.Vote = None
+		r.Term = term //重置Term字段
+		r.Vote = None //重置Vote字段
 	}
-	r.lead = None
+	r.lead = None //清空lead字段
 
-	r.electionElapsed = 0
-	r.heartbeatElapsed = 0
-	r.resetRandomizedElectionTimeout()
+	r.electionElapsed = 0              //重置选举计时器
+	r.heartbeatElapsed = 0             //重置心跳计时器
+	r.resetRandomizedElectionTimeout() //重置选举计时器的过期时间（随机值）
 
-	r.abortLeaderTransfer()
+	r.abortLeaderTransfer() //清空leaderTransfer
 
-	r.prs.ResetVotes()
+	r.prs.ResetVotes() //重置votes
 	r.prs.Visit(func(id uint64, pr *tracker.Progress) {
 		*pr = tracker.Progress{
 			Match:     0,
@@ -627,9 +628,9 @@ func (r *raft) reset(term uint64) {
 		}
 	})
 
-	r.pendingConfIndex = 0
+	r.pendingConfIndex = 0 //清空pendingConf字段
 	r.uncommittedSize = 0
-	r.readOnly = newReadOnly(r.readOnly.option)
+	r.readOnly = newReadOnly(r.readOnly.option) //只读请求的相关设置
 }
 
 func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
@@ -692,11 +693,11 @@ func (r *raft) tickHeartbeat() {
 }
 
 func (r *raft) becomeFollower(term uint64, lead uint64) {
-	r.step = stepFollower
-	r.reset(term)
+	r.step = stepFollower //setFollower中封装了follower节点处理消息的行为
+	r.reset(term)         //重置raft实力term vote等字段
 	r.tick = r.tickElection
-	r.lead = lead
-	r.state = StateFollower
+	r.lead = lead           //设置当前集群leader节点
+	r.state = StateFollower //设置当前节点角色
 	r.logger.Infof("%x became follower at term %d", r.id, r.Term)
 }
 
