@@ -147,7 +147,7 @@ type Config struct {
 	// 0 for at most one entry per message.
 	MaxSizePerMsg uint64 //初始化maxMsgSize，0表示每条消息最多携带一条entry
 	// MaxCommittedSizePerReady limits the size of the committed entries which
-	// can be applied.
+	// can be applied. 限制可以被应用的已提交entry的大小
 	MaxCommittedSizePerReady uint64
 	// MaxUncommittedEntriesSize limits the aggregate byte size of the
 	// uncommitted entries that may be appended to a leader's log. Once this

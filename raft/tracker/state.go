@@ -33,7 +33,7 @@ const (
 	// StateSnapshot indicates a follower that needs log entries not available
 	// from the leader's Raft log. Such a follower needs a full snapshot to
 	// return to StateReplicate.
-	//快中状态：follower节点正在复制leader的快照
+	//快照状态：follower节点正在复制leader的快照
 	StateSnapshot
 )
 

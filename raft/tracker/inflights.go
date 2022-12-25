@@ -19,6 +19,7 @@ package tracker
 // use Full() to check whether more messages can be sent, call Add() whenever
 // they are sending a new append, and release "quota" via FreeLE() whenever an
 // ack is received.
+//Inflights 记录发送给follower节点但是没有收到ack的消息的索引
 type Inflights struct {
 	// the starting index in the buffer
 	start int
@@ -71,6 +72,7 @@ func (in *Inflights) Add(inflight uint64) {
 // grow the inflight buffer by doubling up to inflights.size. We grow on demand
 // instead of preallocating to inflights.size to handle systems which have
 // thousands of Raft groups per process.
+//grow 扩容buffer数组长度:当数组长度不够用时，每次扩容数组容量为当前长度2倍。但是最多只扩容到size定义的容量。
 func (in *Inflights) grow() {
 	newSize := len(in.buffer) * 2
 	if newSize == 0 {

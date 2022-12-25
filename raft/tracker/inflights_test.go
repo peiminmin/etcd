@@ -15,6 +15,7 @@
 package tracker
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 )
@@ -186,4 +187,17 @@ func TestInflightFreeFirstOne(t *testing.T) {
 	if !reflect.DeepEqual(in, wantIn) {
 		t.Fatalf("in = %+v, want %+v", in, wantIn)
 	}
+}
+
+func TestInflightsGrow(t *testing.T) {
+	in := NewInflights(10)
+	for i := 0; i < 5; i++ {
+		in.Add(uint64(i))
+		fmt.Printf("buffer is:%v \n", in.buffer)
+	}
+	fmt.Printf("before grow buffer is:%v \n", in.buffer)
+	//before grow buffer is:[0 1 2 3 4 0 0 0]
+	in.grow()
+	fmt.Printf("after grow buffer is:%v \n", in.buffer)
+	//after grow buffer is:[0 1 2 3 4 0 0 0 0 0]
 }

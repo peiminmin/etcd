@@ -27,6 +27,7 @@ import (
 // NB(tbg): Progress is basically a state machine whose transitions are mostly
 // strewn around `*raft.raft`. Additionally, some fields are only used when in a
 // certain State. All of this isn't ideal.
+//Progress 是leader用来控制发送给follower消息的控制器
 // (0,Next)日志已经发送给节点，(0,match)节点已经接收的日志
 //探测状态通过ProbeSent控制消息发送的频率，复制状态通过inflights控制发送流量
 //如果follower返回消息中确认接收的日志索引大于match，说明follower开始接收日志，进入复制状态
@@ -45,7 +46,7 @@ type Progress struct {
 	//
 	// When in StateSnapshot, leader should have sent out snapshot
 	// before and stops sending any replication message.
-	State StateType //对应follower几点的复制状态
+	State StateType //对应follower节点的复制状态
 
 	// PendingSnapshot is used in StateSnapshot.
 	// If there is a pending snapshot, the pendingSnapshot will be set to the
@@ -146,6 +147,8 @@ func (pr *Progress) BecomeSnapshot(snapshoti uint64) {
 // MaybeUpdate is called when an MsgAppResp arrives from the follower, with the
 // index acked by it. The method returns false if the given n index comes from
 // an outdated message. Otherwise it updates the progress and returns true.
+// 当收到follower节点的回复消息(MsgAppResp),需调用该方法
+//ask： 这里为啥不更新inflight,不更新inflight，不会导致消息发送阻塞?
 func (pr *Progress) MaybeUpdate(n uint64) bool {
 	var updated bool
 	if pr.Match < n {
@@ -172,6 +175,8 @@ func (pr *Progress) OptimisticUpdate(n uint64) { pr.Next = n + 1 }
 //
 // If the rejection is genuine, Next is lowered sensibly, and the Progress is
 // cleared for sending log entries.
+// MaybeDecrTo 当发送给follower的entry log失败时，folloer拒绝消息时, leader 通过该方法
+// 调整process (复制进度)，rejected: follower拒绝消息的索引, matchHint: leader期望降低的索引
 func (pr *Progress) MaybeDecrTo(rejected, matchHint uint64) bool {
 	if pr.State == StateReplicate {
 		// The rejection must be stale if the progress has matched and "rejected"
@@ -203,6 +208,7 @@ func (pr *Progress) MaybeDecrTo(rejected, matchHint uint64) bool {
 // operation, this is false. A throttled node will be contacted less frequently
 // until it has reached a state in which it's able to accept a steady stream of
 // log entries again.
+// IsPaused 是否暂停发送entry log给follower节点
 func (pr *Progress) IsPaused() bool {
 	switch pr.State {
 	case StateProbe:
