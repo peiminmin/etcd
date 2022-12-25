@@ -29,8 +29,8 @@ import (
 // certain State. All of this isn't ideal.
 //Progress 是leader用来控制发送给follower消息的控制器
 // (0,Next)日志已经发送给节点，(0,match)节点已经接收的日志
-//探测状态通过ProbeSent控制消息发送的频率，复制状态通过inflights控制发送流量
-//如果follower返回消息中确认接收的日志索引大于match，说明follower开始接收日志，进入复制状态
+// 探测状态通过ProbeSent控制消息发送的频率，复制状态通过inflights控制发送流量
+// 如果follower返回消息中确认接收的日志索引大于match，说明follower开始接收日志，进入复制状态
 type Progress struct {
 	//match：对应follower节点当前已经复制成功的entry记录的索引
 	//next：对应follower节点下一个待复制entry记录的索引
@@ -149,14 +149,18 @@ func (pr *Progress) BecomeSnapshot(snapshoti uint64) {
 // an outdated message. Otherwise it updates the progress and returns true.
 // 当收到follower节点的回复消息(MsgAppResp),需调用该方法
 //ask： 这里为啥不更新inflight,不更新inflight，不会导致消息发送阻塞?
+// 调用MaybeUpdate方法情况：
+// 1. leader节点向自己raftLog中追加日志
+// 2. 当leader节点收到follower节点的msgAppResp消息，也会调用方法尝试修改follower节点对应的Progress实例。
 func (pr *Progress) MaybeUpdate(n uint64) bool {
 	var updated bool
 	if pr.Match < n {
-		pr.Match = n
+		pr.Match = n //n之前成功发送的所有Entry记录已经成功写入对应节点的raftLog中
 		updated = true
+		//下面将Progress.paused设置为false，表示Leader节点可以继续向对应Follower节点发送MsgApp消息
 		pr.ProbeAcked()
 	}
-	pr.Next = max(pr.Next, n+1)
+	pr.Next = max(pr.Next, n+1) //移动Next字段，下次要复制Entry记录从Next开始
 	return updated
 }
 
