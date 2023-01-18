@@ -17,6 +17,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"go.uber.org/zap"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -25,6 +26,7 @@ import (
 	"time"
 
 	"go.etcd.io/etcd/raft/v3/raftpb"
+	"go.etcd.io/etcd/server/v3/wal"
 )
 
 func getSnapshotFn() (func() ([]byte, error), <-chan struct{}) {
@@ -284,4 +286,9 @@ func TestSnapshot(t *testing.T) {
 	}
 	close(c.applyDoneC)
 	<-clus.snapshotTriggeredC[0]
+}
+
+func TestValidSnapshotEntries(t *testing.T) {
+	id := 1
+	wal.ValidSnapshotEntries(zap.NewExample(), fmt.Sprintf("raftexample-%d", id))
 }

@@ -581,12 +581,15 @@ func ValidSnapshotEntries(lg *zap.Logger, walDir string) ([]walpb.Snapshot, erro
 			var loadedSnap walpb.Snapshot
 			pbutil.MustUnmarshal(&loadedSnap, rec.Data)
 			snaps = append(snaps, loadedSnap)
+			fmt.Printf("type:%s ,data:%v \n", "snapshotType", loadedSnap)
 		case stateType:
 			state = mustUnmarshalState(rec.Data)
+			fmt.Printf("type:%s ,data:%v \n", "stateType", state)
 		case crcType:
 			crc := decoder.crc.Sum32()
 			// current crc of decoder must match the crc of the record.
 			// do no need to match 0 crc, since the decoder is a new one at this case.
+			fmt.Printf("type:%s,crs:%d \n", "crcType", crc)
 			if crc != 0 && rec.Validate(crc) != nil {
 				return nil, ErrCRCMismatch
 			}
