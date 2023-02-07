@@ -28,11 +28,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap/zaptest"
+
 	"go.etcd.io/etcd/client/pkg/v3/fileutil"
 	"go.etcd.io/etcd/pkg/v3/pbutil"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"go.etcd.io/etcd/server/v3/wal/walpb"
-	"go.uber.org/zap/zaptest"
 
 	"go.uber.org/zap"
 )
@@ -1120,5 +1121,12 @@ func TestValidSnapshotEntriesAfterPurgeWal(t *testing.T) {
 	_, err = ValidSnapshotEntries(zap.NewExample(), p)
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestTryLockFile(t *testing.T) {
+	_, err := fileutil.TryLockFile("test.file", os.O_RDWR, fileutil.PrivateFileMode)
+	if err != nil {
+		t.Fatal(err.Error())
 	}
 }

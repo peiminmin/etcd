@@ -65,6 +65,7 @@ func New(lg *zap.Logger, dir string) *Snapshotter {
 	}
 }
 
+// SaveSnap 将snapshot 保存到snapshot目录下，生成.snap文件, .snap文件中回记录文件内容crc值，用于load文件时判断文件是否被更改
 func (s *Snapshotter) SaveSnap(snapshot raftpb.Snapshot) error {
 	if raft.IsEmptySnap(snapshot) {
 		return nil

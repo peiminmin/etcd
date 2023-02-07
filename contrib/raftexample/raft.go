@@ -243,10 +243,14 @@ func (rc *raftNode) openWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 }
 
 // replayWAL replays WAL entries into the raft instance.
+// raft中通过wal记录数据的操作记录，但是wal日志条目超过某个阈值之后，会将这部分wal日志做快照
+// 快照就是这部分wal日志按顺序执行后的结果
 func (rc *raftNode) replayWAL() *wal.WAL {
 	log.Printf("replaying WAL of member %d", rc.id)
+	//1. 加载快照
 	snapshot := rc.loadSnapshot()
 	w := rc.openWAL(snapshot)
+	//2. 读取wal
 	_, st, ents, err := w.ReadAll()
 	if err != nil {
 		log.Fatalf("raftexample: failed to read WAL (%v)", err)
@@ -272,6 +276,7 @@ func (rc *raftNode) writeError(err error) {
 }
 
 func (rc *raftNode) startRaft() {
+	//snapshot 目录不存在则，创建一个新的snapshot目录
 	if !fileutil.Exist(rc.snapdir) {
 		if err := os.Mkdir(rc.snapdir, 0750); err != nil {
 			log.Fatalf("raftexample: cannot create dir for snapshot (%v)", err)
@@ -280,6 +285,7 @@ func (rc *raftNode) startRaft() {
 	rc.snapshotter = snap.New(zap.NewExample(), rc.snapdir)
 
 	oldwal := wal.Exist(rc.waldir)
+	//重放wal日志
 	rc.wal = rc.replayWAL()
 
 	// signal replay has finished

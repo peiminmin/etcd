@@ -555,6 +555,7 @@ func ValidSnapshotEntries(lg *zap.Logger, walDir string) ([]walpb.Snapshot, erro
 	var err error
 
 	rec := &walpb.Record{}
+	//获取所有wal文件名字
 	names, err := readWALNames(lg, walDir)
 	if err != nil {
 		return nil, err
@@ -562,6 +563,7 @@ func ValidSnapshotEntries(lg *zap.Logger, walDir string) ([]walpb.Snapshot, erro
 
 	// open wal files in read mode, so that there is no conflict
 	// when the same WAL is opened elsewhere in write mode
+	// 打开所有wal文件的
 	rs, _, closer, err := openWALFiles(lg, walDir, names, 0, false)
 	if err != nil {
 		return nil, err
