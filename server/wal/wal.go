@@ -579,6 +579,7 @@ func ValidSnapshotEntries(lg *zap.Logger, walDir string) ([]walpb.Snapshot, erro
 
 	for err = decoder.decode(rec); err == nil; err = decoder.decode(rec) {
 		switch rec.Type {
+		//snapshotType 存储的是snapshot元数据？完整的snapshot?
 		case snapshotType:
 			var loadedSnap walpb.Snapshot
 			pbutil.MustUnmarshal(&loadedSnap, rec.Data)
